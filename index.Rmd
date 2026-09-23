@@ -1,0 +1,288 @@
+---
+title: "Online Resource 1"
+author: "Pazan, K., Dusseldorp, G.L., & Schmid, V.C."
+date: "2026-09-10"
+output: html_document
+bibliography: references.bib
+---
+## Information
+
+This document contains the code and data used for the paper, "Spall in good time: reassessing bipolar flaking in Late Pleistocene southern Africa" submitted to the *Journal of Archaeological Method and Theory*.
+
+## Download data 
+You will need to download the data and color palettes below. Data are available both in rds and csv format.  
+[UMH_milky_dims csv](UMH_milky_dims.csv)  
+[UMH_milky_dims rds](UMH_milky_dims.rds)  
+[MLK_cores csv](MLK_cores.csv)  
+[MLK_cores rds](MLK_cores.rds)  
+[UMH_palette](UMH_palette.rds)  
+[MLK_palette](MLK_palette.rds)
+
+You will also need to have the following packages downloaded for the .Rmd file to work properly:
+tidyverse, dplyr, rstatix, MASS, DescTools, MKinfer, Hotelling, factoextra, FactoMineR, vegan, ggplot2, ggpubr, rmarkdown, knitr
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(rstatix)
+library(MASS)
+library(DescTools)
+library(MKinfer)
+library(Hotelling)
+library(factoextra)
+library(FactoMineR)
+library(vegan)
+library(ggplot2)
+library(ggpubr)
+library(rmarkdown)
+library(knitr)
+```
+
+
+```{r setup2, include=TRUE}
+UMH_milky_dims <- readRDS("UMH_milky_dims.rds")
+MLK_cores <- readRDS("MLK_cores.rds")
+UMH_palette <- readRDS("UMH_palette.rds")
+MLK_palette <- readRDS("MLK_palette.rds")
+set.seed(123)
+```
+
+
+
+## Outlier analysis
+
+We conducted multivariate outlier detection using Mahalanobis distances in the package *rstatix* [@rstatix]. Mahalonobis distance quantifies the likelihood than a multivariate observation belongs to a particular group. When used on a single group, it detects observations that are outliers relative to the group as a whole [@bakker2026].
+
+### Umhlatuzana milky quartz
+
+```{r quartz outlier, cache=TRUE}
+library(tidyverse)
+library(rstatix)
+UMH_outlier_analysis <- UMH_milky_dims[,c(1:4)] %>% mahalanobis_distance()
+UMH_outliers <- UMH_outlier_analysis %>% filter(is.outlier == TRUE)
+print(UMH_outliers)
+```
+
+No multivariate outliers were detected.
+
+### Melikane CCS bipolar cores
+
+```{r CCS BP outlier, cache=TRUE}
+MLK_BP_analysis2 <- MLK_cores[MLK_cores$Type=="Bipolar",c(10,19:21)] %>% mahalanobis_distance()
+BP_outliers2 <- MLK_BP_analysis2 %>% filter(is.outlier == TRUE)
+print(BP_outliers2)
+```
+
+No multivariate outliers were detected.
+
+### Melikane CCS freehand cores
+
+```{r test, cache=TRUE}
+MLK_freehand_analysis2 <- MLK_cores[MLK_cores$Type=="Freehand",c(10,19:21)] %>% mahalanobis_distance()
+freehand_outliers2 <- MLK_freehand_analysis2 %>% filter(is.outlier == TRUE)
+print(freehand_outliers2)
+```
+
+One multivariate outlier was removed from the dataframe. The Melikane dataset now consists of 34 freehand and 25 bipolar cores.
+
+```{r free, cache=TRUE}
+MLK_cleaned <- MLK_cores[MLK_cores$Weight<=85.3,]
+xtabs(~Type, MLK_cleaned)
+```
+
+## Data preparation
+
+A dataframe was created consisting of the Melikane and Umhlatuzana bipolar cores. Geometric mean was added as a variable to the bipolar data frame, and log-shape variables were calculated [@mosimann1979; @darroch1985c]. The geometric mean can be calculated by exponentiating the mean of the logged variables (length, width, and thickness), expressed by the function used to create `bipolar$GM` as shown in the code block below. The log-shape variables (`bipolar_shape`) were created by taking the log of the ratio of each variable to the geometric mean.
+
+```{r prep, cache=TRUE}
+MLK_BPdims <- MLK_cleaned[MLK_cleaned$Type=="Bipolar",c("Core length","Core width","Core thickness", "Weight")]
+MLK_BPdims$Site <- "MLK"
+bipolar <- rbind(UMH_milky_dims, MLK_BPdims)
+bipolar$GM <- exp(rowMeans(log(bipolar[, c("Core length", "Core width", "Core thickness")])))
+bipolar_shape <- log(bipolar[, c("Core length", "Core width", "Core thickness")] /bipolar$GM)
+```
+
+Geometric mean was also added to the dataframe of all Melikane cores.
+
+```{r eval=FALSE}
+MLK_cleaned$GM<- exp(rowMeans(log(MLK_cleaned[, c("Core length", "Core width", "Core thickness")])))
+```
+
+## Comparison of mean dimensions
+
+Welch's permutation t-tests were performed in *MKinfer* [@MKinfer] to assess differences between the Melikane and Umhlatuzana bipolar cores. Welch's permutation t-tests are a robust and powerful alternative to Welch’s t-tests and Mann-Whitney U-Tests when distributions deviate from normality and/or samples have unequal variances [@mielke1994; @ludbrook1994]. Permutation tests also perform more consistently on homoscedastic data with skewed distributions, and on unbalanced designs (groups with unequal sample sizes) [@noguchi2021]. This makes them particularly appropriate for our data, which are unbalanced and visibly skewed on the density plots.
+
+Only core thickness had a p-value \<.05 and a 95% confidence interval excluding 0.
+
+```{r}
+set.seed(123)
+lapply(bipolar[,c(1:4,6)], function(i) perm.t.test(i~bipolar$Site))
+
+```
+
+Welch's permutation t-tests were also performed to assess differences between Melikane freehand and bipolar cores. In these instances, bipolar cores were smaller in all dimensions.
+
+```{r}
+MLK_cleaned <- MLK_cleaned %>% mutate(Type=fct_relevel(Type, "Bipolar", "Freehand"))
+lapply(MLK_cleaned[,c(10,19:21,26)], function(i) perm.t.test(i~MLK_cleaned$Type))
+```
+
+### Shape vs. size
+
+To confirm that there were no predictable changes in shape relative to size in the bipolar core sample, we first checked the log-shape variables for normality using Shapiro-Wilk Tests and then performed pairwise Pearsons product-moment correlations between the log shape variables and the log geometric mean [@falsetti1993]. There were no correlations between the shape variables and size, indicating isometry. Having established that shape differences could not be explained by size, we therefore felt it was appropriate to continue with our PCA.
+
+```{r logGM, cache=TRUE}
+bipolar$logGM <- log(bipolar$GM)
+lapply(bipolar_shape[, 1:3], shapiro.test)
+lapply(bipolar_shape[,c(1:3)], function(i) cor.test(i, bipolar$logGM, method="pearson"))
+```
+
+## Principal components analysis
+
+PCA was conducted on scaled log-shape variables for the Melikane and Umhlatuzana bipolar cores. PCA constructs new, uncorrelated variables - "principal components" - from a larger set of correlated variables. The PCs are synthesized from the original variables, allowing us to assess how aspects of core dimensions relate to one another and contribute to variation in shape. The log-shape variables were scaled to account for differences in variance, allowing each variable to contribute equally to the result [@bakker2026].
+
+```{r , cache=TRUE}
+bipolar_pca <- prcomp(bipolar_shape, scale. = TRUE)
+bipolar_pca
+summary(bipolar_pca)
+```
+
+```{r echo=FALSE}
+fviz_screeplot(bipolar_pca)
+```
+
+Values for PC1 and PC2 were added to the data frame of bipolar cores, and a biplot was visualized using PCs 1 and 2.
+
+```{r cache=TRUE}
+bipolar$PC1 <- bipolar_pca$x[,1]
+bipolar$PC2 <- bipolar_pca$x[,2]
+```
+
+```{r cache=TRUE, echo=FALSE, error = TRUE, warning = FALSE, message = FALSE}
+bipolar_biplot <-
+fviz_pca_biplot(
+bipolar_pca,
+geom.ind = "point",
+habillage = bipolar$Site,
+palette = UMH_palette,
+addEllipses = TRUE,
+ellipse.level = 0.95, alpha.ellipse = .3,
+pointshape = 21,
+pointsize = bipolar$GM,
+fill.ind = bipolar$Site,
+alpha.ind = 0.8,
+col.var = "grey30",
+arrowsize = .7,
+labelsize = 5,
+repel = TRUE,
+legend.title = "Site"
+) +
+labs(size = "GM",
+x = "PC1 (59.1%)\nRelatively elongated \u2190\u2192 Relatively blocky",
+y = "PC2 (40.9%)\nMore remaining mass \u2190\u2192 Exhausted "
+) +
+theme_classic(base_size = 14) +
+theme(
+legend.position = "right",
+panel.grid = element_blank(),
+axis.title = element_text(size = 11),
+title = element_blank(), legend.title = element_text(size=12, face = "bold")
+)+
+scale_size_continuous(name = "GM", range = c(2,5), breaks = c(5,15,25), limits = range(c(bipolar$GM, 5, 26)))+
+guides(
+colour = guide_legend(order = 1),
+fill   = guide_legend(order = 1),
+size   = guide_legend(order = 2)
+)
+bipolar_biplot
+```
+
+## Evaluating PCA results
+
+### Multivariate differences
+
+We conducted a Permutation Hotellings T Test in the package *Hotelling* [@Hotelling] to look for multivariate shape differences between the Umhlatuzana and Melikane cores. The test did not detect significant multivariate differences in means.
+
+```{r cache=TRUE,echo=TRUE,results='hide'}
+library(Hotelling)
+hotelling_bipolar <-
+hotelling.test(PC1+PC2~Site, data = bipolar, perm=TRUE, B=10000)
+```
+```{r cache=TRUE}
+print(hotelling_bipolar)
+```
+We conducted a test of multivariate dispersion in the package *vegan* [@vegan], followed by ANOVA to assess significance according to the procedures in @bakker2026. The test did not detect significant differences in multivariate dispersion.
+
+```{r cache=TRUE}
+library(vegan)
+bipolar_dispersion <- betadisper(d=dist(bipolar[,c("PC1","PC2")]), group=bipolar$Site, type="centroid")
+bipolar_dispersion
+anova(bipolar_dispersion)
+```
+
+We conducted Linear Discriminant Analysis (LDA) in the *MASS* package [@MASS], asking whether the values of PC1 and PC2 could be used to assign cores to the correct site. We used proportional prior probabilities to account for differences in sample size, and used the cross-validation option built into the lda() function to assess the model’s accuracy according to procedures in @carlson2017.
+
+```{r cache=TRUE}
+library(MASS)
+bipolar.lda <- lda(Site~PC1+PC2, data=bipolar, CV=TRUE)
+bipolar.lda.table <- table(Observed=bipolar$Site, Predicted=bipolar.lda$class)
+bipolar.lda.table
+```
+
+Model accuracy was 0.62, indicating that the model assigned only 62% of the cores to the correct site.
+
+```{r cache=TRUE}
+lda_accuracy <- mean(bipolar.lda$class == bipolar$Site)
+print(lda_accuracy)
+```
+
+### Univariate differences
+
+We separated PC1 and PC2 to evaluate intersite univariate differences. While the sites differed significantly along PC1, no difference was detected along PC2.
+
+```{r}
+lapply(bipolar[,c("PC1","PC2")], function(i) perm.t.test(i~bipolar$Site))
+```
+
+Having established that the Umhlatuzana cores were significantly more elongated, we wanted to know whether at Umhaltuzana in particular, there was a relationship between elongation and exhaustion. We conducted a Shapiro-Wilk Test to confirm normality in *rstatix* [@rstatix], and then conducted a Pearson's product-moment correlation on PC1 and PC2. This revealed a significant, positive, moderately strong correlation between axes, indicating that cores with higher values on PC1 (chunkier cores) were also more likely to have higher values on PC2, indicating greater exhaustion. More elongated cores (lower values on PC1) were also more likely to have more remaining uselife (lower values on PC2).
+
+```{r cache=TRUE}
+shapiro_test(bipolar[bipolar$Site=="UMH",], vars = c("PC1","PC2"))
+cor.test(bipolar$PC1[bipolar$Site=="UMH"], bipolar$PC2[bipolar$Site=="UMH"], method="pearson")
+```
+
+This correlation was not present within the Melikane data. (Spearman's rank correlation was used, due to rejection of normality for PC1.)
+
+```{r cache=TRUE}
+shapiro_test(bipolar[bipolar$Site=="MLK",], vars = c("PC1","PC2"))
+cor.test(bipolar$PC1[bipolar$Site=="MLK"], bipolar$PC2[bipolar$Site=="MLK"], method="spearman")
+```
+
+## Data 
+
+Data sets produced in this file are available below.  
+
+### bipolar  
+
+[bipolar csv](bipolar.csv)
+
+```{r, echo=FALSE}
+paged_table(bipolar)
+```
+
+### bipolar_shape  
+
+[bipolar_shape csv](bipolar_shape.csv)  
+
+```{r echo=FALSE}
+paged_table(bipolar_shape)
+```
+
+### MLK_cleaned  
+
+[MLK_cleaned csv](MLK_cleaned.csv)  
+
+```{r, echo=FALSE}
+paged_table(MLK_cleaned)
+```
