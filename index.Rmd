@@ -7,7 +7,7 @@ bibliography: references.bib
 ---
 ## Information
 
-This document contains the code and data used for the paper, "Spall in good time: reassessing bipolar flaking in Late Pleistocene southern Africa" submitted to the *Journal of Archaeological Method and Theory*.
+This document contains the code and data used for the paper, "Spall in good time: reassessing bipolar flaking in Late Pleistocene southern Africa" submitted to the *Journal of Archaeological Method and Theory*. If you are viewing this as a static pdf file, please visit [github](https://k-pazan.github.io/rapid-reduction/) to view an html version with active hyperlinks.
 
 ## Download data 
 You will need to download the data and color palettes below. Data are available both in rds and csv format.  
